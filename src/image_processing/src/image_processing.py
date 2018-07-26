@@ -63,6 +63,7 @@ class image_converter:
                 if(isWhite):
                     point = [x,y]
                     image_points.append(point)
+                    print image_points
 
         print 'points: \n', image_points
         world_points=np.array([[0,80,0],[0,40,0],[0,0,0],[28,80,0],[28,40,0],[28,0,0]],np.float32)

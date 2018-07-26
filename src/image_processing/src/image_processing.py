@@ -39,8 +39,10 @@ class image_converter:
         bi_gray_min = 252
         (thresh,im_bw) = cv2.threshold(gray, bi_gray_min, bi_gray_max, cv2.THRESH_BINARY);
 
+        #kernel = np.ones((5,5), np.uint8)
 
-        myCoords = np.matrix
+        #img_erosion = cv2.erode(im_bw, kernel, iterations=1)
+        image_points = []
 
         for y in range(im_bw.shape[1]):
             for x in range(im_bw.shape[0]):
@@ -60,25 +62,54 @@ class image_converter:
 
                 if(isWhite):
                     point = [x,y]
-                    myCoords.append(point)
+                    image_points.append(point)
 
-        #cv2.imshow('gray',gray)
-        #cv2.imshow('im_bw',im_bw)
-        #cv2.waitKey(0)
-        #cv2.destroyAllWindows()
-        #print myCoords
+        print 'points: \n', image_points
+        world_points=np.array([[0,80,0],[0,40,0],[0,0,0],[28,80,0],[28,40,0],[28,0,0]],np.float32)
+        print 'w_points: \n', world_points
+        intrinsics = np.array([[614.1699, 0, 329.9491], [0, 614.9002, 237.2788], [ 0, 0, 1]], np.float32)
+        distCoeffs = np.array([0.1115,-0.1089,0,0],np.float32)
+        rvec = np.zeros((3,1))
+        tvec = np.zeros((3,1))
+        cv2.solvePnP(world_points, image_points, intrinsics, distCoeffs, rvec, tvec);
+        print 'rvec \n' , rvec
+        print 'tvec \n' , tvec
+        rmat = cv2.Rodrigues(rvec)[0]
+        print 'rmat \n' , rmat
+        inv_rmat = rmat.transpose()
+        print 'inv_rmat \n' , inv_rmat
+        inv_rmat_ = np.negative(inv_rmat)
+        inv_tvec = inv_rmat_.dot(tvec)
+        print 'inv_tvec \n' , inv_tvec
+        sy = math.sqrt(rmat[0,0] * rmat[0,0] +  rmat[1,0] * rmat[1,0]);
+        singular = sy < 1e-6; # If
+        if (~singular):
+             x = math.atan2(-rmat[2,1] , rmat[2,2]);
+             y = math.atan2(-rmat[2,0], sy);
+             z = math.atan2(rmat[1,0], rmat[0,0]);
+        else:
+             x = math.atan2(-rmat[1,2], rmat[1,1]);
+             y = math.atan2(-rmat[2,0], sy);
+             z = 0;
+        print 'x,y,z', x,y,z
 
-        fx = 614.1699;
-        fy = 614.9002;
-        cx = 329.9491;
-        cy = 237.2788;
+        br = tf.TransformBroadcaster()
+        br.sendTransform((inv_tvec[0]/100, inv_tvec[1]/100, inv_tvec[2]/100),
+                         tf.transformations.quaternion_from_euler(x, y, z),
+                         rospy.Time(0),
+                         "camera",
+                         "world")
 
-        objectPoints = np.matrix([[0,0],[0,40],[30,0],[30,40],[60,0],[60,40]])
-        imagePoints = myCoords
-        cameraMatrix = np.eye(3)
-        distCoeffs = np.zeros((5,1))
-        rot = cv2.solvePnP(objectPoints, imagePoints, cameraMatrix, distCoeffs)
-        print rot
+        Master = Pose()
+        Master.position.x = inv_tvec[0]/100
+        Master.position.y = inv_tvec[1]/100
+        Master.position.z = inv_tvec[2]/100
+        q = tf.transformations.quaternion_from_euler(x, y, z)
+        Master.orientation.x = q[0]
+        Master.orientation.y = q[1]
+        Master.orientation.z = q[2]
+        Master.orientation.w = q[3]
+        self.pub_pose.publish(Master)
         rospy.sleep(10)
 
 def main(args):

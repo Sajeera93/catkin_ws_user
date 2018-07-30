@@ -2,8 +2,10 @@
 import roslib
 # roslib.load_manifest('my_package')
 import sys
+import numpy as np
 import rospy
 import cv2
+
 from std_msgs.msg import String
 from geometry_msgs.msg import Pose
 from geometry_msgs.msg import Point
@@ -13,7 +15,7 @@ from cv_bridge import CvBridge, CvBridgeError
 #import matplotlib
 #matplotlib.use('Agg')
 from matplotlib import pyplot as plt
-
+from numpy.polynomial.polynomial import polyfit
 # from __future__ import print_function
 
 class image_converter:
@@ -34,6 +36,7 @@ class image_converter:
 
         #make it gray
         gray=cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+        #gray=cv2.imread('',0)
 
         #bi_gray
         bi_gray_max = 255
@@ -88,7 +91,7 @@ class image_converter:
 
         for j in xrange(hsv.shape[0]):
             for i in xrange(hsv.shape[1]):
-                if    (v[j,i]>= v_min and v[j,i]<= v_max and s[j,i]>= s_min and s[j,i]<= s_max and h[j,i]>= h_min and h[j,i]<= h_max):
+                if (v[j,i]>= v_min and v[j,i]<= v_max and s[j,i]>= s_min and s[j,i]<= s_max and h[j,i]>= h_min and h[j,i]<= h_max):
                     h[j,i]=0
                     s[j,i]=0
                     v[j,i]=0
@@ -98,24 +101,97 @@ class image_converter:
                     v[j,i]=255
 
         bi_hsv = cv2.merge((h,s,v))
+        kernel = np.ones((3,3), np.uint8)
 
-        # titles = ['Original Image', 'GRAY','BINARY','GAUSS','EDGE','BI_RGB','BI_HSV']
-        # images = [cv_image, gray, thresh1,dst,edge_img,bi_rgb,bi_hsv]
-        #
-        # for i in xrange(7):
-        #     plt.subplot(2,4,i+1),plt.imshow(images[i],'gray')
-        #     plt.title(titles[i])
-        #     plt.xticks([]),plt.yticks([])
-        #
-        # plt.show()
-        # print("Done")
+        img_erosion = cv2.erode(thresh1, kernel, iterations=1)
+        imgHeight = img_erosion.shape[0]
+        imgWidth = img_erosion.shape[1]
+
+        #cropedImage = img_erosion[imgHeight*1/4:imgHeight*3/4, 0:imgWidth]
+
+        #imgHeight = cropedImage.shape[0]
+        #imgWidth = cropedImage.shape[1]
+
+        firstHalfImg = img_erosion[0:imgHeight, 0:imgWidth * 1/3]
+        secondHalfImg = img_erosion[0:imgHeight, imgWidth * 2/3 :imgWidth]
+
+        cv2.imshow('im_bw',thresh1)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        
+        x,y = self.getWhitePoints(img_erosion)
+        plt.scatter(y, x)
+        plt.show()
+
+        z = polyfit(x, y, 1)
+        f = np.poly1d(z)
+
+        # run RANSAC algorithm
+        all_data = np.hstack((x,y))
+        #ransac_fit = self.ransac(all_data, 100, 0, 1000, 7e3, 300)
+        #print ransac_fit
+        #plt.plot(x_new, y_new, color='green')
 
         try:
-            print 'pub'
             self.image_pub.publish(self.bridge.cv2_to_imgmsg(thresh1, "mono8"))
         except CvBridgeError as e:
-                print(e)
+            print(e)
 
+    def getWhitePoints(self, img):
+        xArr = []
+        yArr = []
+
+        for x in range(img.shape[0]):
+            for y in range(img.shape[1]):
+                isWhite = img[x,y] == 255
+
+                if(isWhite):
+                    xArr.append(-x)
+                    yArr.append(y)
+
+        return (xArr, yArr)
+
+    def ransac(self,data,model,n,k,t,d):
+        iterations = 0
+        bestfit = None
+        besterr = np.inf
+        best_inlier_idxs = None
+
+        while iterations < k:
+            maybe_idxs, test_idxs = self.random_partition(n,data.shape[0])
+            maybeinliers = data[maybe_idxs,:]
+            test_points = data[test_idxs]
+            maybemodel = model.fit(maybeinliers)
+            test_err = model.get_error( test_points, maybemodel)
+            also_idxs = test_idxs[test_err < t] # select indices of rows with accepted points
+            alsoinliers = data[also_idxs,:]
+
+            if len(alsoinliers) > d:
+                betterdata = np.concatenate( (maybeinliers, alsoinliers) )
+                bettermodel = model.fit(betterdata)
+                better_errs = model.get_error( betterdata, bettermodel)
+                thiserr = np.mean( better_errs )
+
+                if thiserr < besterr:
+                    bestfit = bettermodel
+                    besterr = thiserr
+                    best_inlier_idxs = np.concatenate( (maybe_idxs, also_idxs) )
+
+            iterations += 1
+
+        if bestfit is None:
+            raise ValueError("did not meet fit acceptance criteria")
+        if return_all:
+            return bestfit, {'inliers':best_inlier_idxs}
+        else:
+            return bestfit
+
+    def random_partition(self,n,n_data):
+        all_idxs = np.arange( n_data )
+        np.random.shuffle(all_idxs)
+        idxs1 = all_idxs[:n]
+        idxs2 = all_idxs[n:]
+        return idxs1, idxs2
 
 def main(args):
     rospy.init_node('image_converter', anonymous=True)

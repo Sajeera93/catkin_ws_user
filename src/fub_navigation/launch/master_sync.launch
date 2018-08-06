@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<launch>
+	<node name="master_discovery_fkie" pkg="master_discovery_fkie" type="master_discovery"></node>
+	<node name="master_sync_fkie" pkg="master_sync_fkie" type="master_sync"></node>
+</launch>

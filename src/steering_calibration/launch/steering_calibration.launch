@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<launch>
+
+	<node name="steering_calibration" pkg="steering_calibration"
+		type="parking_maneuver.py" output="screen">
+	</node>
+
+	<node name="master_sync_fkie" pkg="simple_drive_control"
+		type="master_sync" output="screen">
+	</node>
+
+</launch>

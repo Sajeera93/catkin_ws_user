@@ -24,7 +24,7 @@ class image_converter:
         self.image_pub = rospy.Publisher("/image_processing/bin_img",Image, queue_size=1)
 
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber("/app/camera/rgb/image_raw",Image,self.callback, queue_size=1)
+        self.image_sub = rospy.Subscriber("/goraa/app/camera/color/image_raw",Image,self.callback, queue_size=1)
 
 
     def callback(self,data):
@@ -36,7 +36,7 @@ class image_converter:
 
         #make it gray
         gray=cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-        #gray=cv2.imread('',0)
+        #gray=cv2.imread('/home/gob/catkin_ws_user/src/image_processing/src/track.png',0)
 
         #bi_gray
         bi_gray_max = 255
@@ -115,21 +115,19 @@ class image_converter:
         firstHalfImg = img_erosion[0:imgHeight, 0:imgWidth * 1/3]
         secondHalfImg = img_erosion[0:imgHeight, imgWidth * 2/3 :imgWidth]
 
-        cv2.imshow('im_bw',thresh1)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        
-        x,y = self.getWhitePoints(img_erosion)
-        plt.scatter(y, x)
+        x1,y1 = self.getWhitePoints(firstHalfImg)
+        plt.scatter(y1, x1)
+        x2,y2 = self.getWhitePoints(secondHalfImg)
+        plt.scatter(y2, x2)
         plt.show()
 
-        z = polyfit(x, y, 1)
-        f = np.poly1d(z)
-
         # run RANSAC algorithm
-        all_data = np.hstack((x,y))
-        #ransac_fit = self.ransac(all_data, 100, 0, 1000, 7e3, 300)
-        #print ransac_fit
+        ransac_fit1 = self.ransac(x1, y1, 10)
+        ransac_fit2 = self.ransac(x2, y2, 10)
+        #f = np.poly1d(ransac_fit)
+
+        print ransac_fit1
+        print ransac_fit2
         #plt.plot(x_new, y_new, color='green')
 
         try:
@@ -151,55 +149,58 @@ class image_converter:
 
         return (xArr, yArr)
 
-    def ransac(self,data,model,n,k,t,d):
+    def ransac(self, x_arr, y_arr, k):
         iterations = 0
         bestfit = None
-        besterr = np.inf
-        best_inlier_idxs = None
+        score = np.inf
+        currScore = np.inf
+        threshold = 1
+
+        print 'ransac'
 
         while iterations < k:
-            maybe_idxs, test_idxs = self.random_partition(n,data.shape[0])
-            maybeinliers = data[maybe_idxs,:]
-            test_points = data[test_idxs]
-            maybemodel = model.fit(maybeinliers)
-            test_err = model.get_error( test_points, maybemodel)
-            also_idxs = test_idxs[test_err < t] # select indices of rows with accepted points
-            alsoinliers = data[also_idxs,:]
+            x1,x2 = self.random_point(x_arr)
+            y1,y2 = self.random_point(y_arr)
 
-            if len(alsoinliers) > d:
-                betterdata = np.concatenate( (maybeinliers, alsoinliers) )
-                bettermodel = model.fit(betterdata)
-                better_errs = model.get_error( betterdata, bettermodel)
-                thiserr = np.mean( better_errs )
+            x = [x1,x2]
+            y = [y1,y2]
+            poly = np.polyfit(x,y,1)
 
-                if thiserr < besterr:
-                    bestfit = bettermodel
-                    besterr = thiserr
-                    best_inlier_idxs = np.concatenate( (maybe_idxs, also_idxs) )
+            for i in range(len(x_arr)):
 
-            iterations += 1
+                distance = distance_to_line(x_arr[i],y_arr[i])
+                if distance < threshold:
+                    currScore +=1
 
-        if bestfit is None:
-            raise ValueError("did not meet fit acceptance criteria")
-        if return_all:
-            return bestfit, {'inliers':best_inlier_idxs}
-        else:
-            return bestfit
+            if(currScore > score):
+                bestfit = poly
+                score = currScore
 
-    def random_partition(self,n,n_data):
-        all_idxs = np.arange( n_data )
+            iteration +=1
+
+        return bestfit
+
+
+    def random_point(self, n_data):
+        all_idxs = np.arange(n_data)
         np.random.shuffle(all_idxs)
         idxs1 = all_idxs[:n]
         idxs2 = all_idxs[n:]
         return idxs1, idxs2
 
+    def distance_to_line(self, x1, y1, m, n):
+        a =(x1 - m)**2
+        b =(y1 - n)**2
+        res = math.sqrt(a+b)
+        return res
+
 def main(args):
     rospy.init_node('image_converter', anonymous=True)
     ic = image_converter()
     try:
-            rospy.spin()
+        rospy.spin()
     except KeyboardInterrupt:
-            print("Shutting down")
+        print("Shutting down")
     cv2.destroyAllWindows()
 
 main(sys.argv)

@@ -12,6 +12,8 @@ from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from std_msgs.msg import Int16, UInt8, Float32, String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
+from matplotlib import pyplot as plt
+import time
 
 
 class VectorfieldController:
@@ -21,10 +23,12 @@ class VectorfieldController:
         self.map_size_y=400 #cm
         self.resolution = 10 # cm
         self.lane=1
-        self.speed_value= 1600
+        self.speed_value= 1000
         self.counter = 0
-        self.error = 0
-        self.current_steering = []
+        self.past_error = 0
+        self.future_error = 0
+        self.y_error = []
+        self.yaw_array = []
 
         print("speed", self.speed_value)
         rospack = rospkg.RosPack()
@@ -54,9 +58,9 @@ class VectorfieldController:
         depth_image = self.bridge.imgmsg_to_cv2(depth_data, "16UC1")
         depth_array = np.array(depth_image, dtype=np.uint16)
         image_np = cv2.imdecode(depth_array, cv2.IMREAD_COLOR)
-        cv2.imshow('depth_image',depth_image)
+        #cv2.imshow('depth_image',depth_image)
         #print image_np
-        waitKey(0)
+        #waitKey(0)
 
     def lane_callback(self, data):
     	if (self.lane==1):
@@ -76,8 +80,9 @@ class VectorfieldController:
         x_index = np.int(x*self.resolution)
         y_index = np.int(y*self.resolution)
 
-        Kp = -2.0
-        Ki = 0.4
+        Kp = -1.2
+        Ki = 0.0
+        Kd = 0.0
 
         if (x_index<0):
             x_index = 0
@@ -90,34 +95,37 @@ class VectorfieldController:
             y_index=(self.map_size_y/self.resolution)-1
 
         x3, y3 = self.matrix[x_index,y_index,:]
-        x4, y4 = self.matrix[x_index+1,y_index+1,:]
-        x5, y5 = self.matrix[x_index+2,y_index+2,:]
-        x6, y6 = self.matrix[x_index+3,y_index+3,:]
 
-        x = [x3,x4,x5,x6]
-        y = [y3,y4,y5,y6]
-
-        coefs = np.polyfit(x,y,2)
-
-        ffit = np.polyval(coefs,x_index+5)
         f_x = np.cos(yaw)*x3 + np.sin(yaw)*y3
         f_y = -np.sin(yaw)*x3 + np.cos(yaw)*y3
 
         #deg = mEuler[2] * 180 / math.pi
         set_point = 100
         steering = np.arctan(f_y/(f_x))
-        steering = Kp * steering + Ki * self.error
+        steering = Kp * steering + Ki * self.past_error + Kd * self.future_error
+
 
         yaw = np.arctan(f_y/(f_x))
         self.pub_yaw.publish(Float32(yaw))
 
+        ts = time.time()
+        #plt.scatter(ts, yaw)
+        #plt.scatter(ts, set_point)
+        #plt.scatter(ts, set_point - yaw)
+        #plt.show()
+
         if(self.counter < 20):
-            self.current_steering.append(np.arctan(f_y/(f_x)))
+            self.yaw_array.append(yaw)
+            self.future_error = set_point - yaw
+            self.y_error.append(self.future_error)
             self.counter +=1
         else:
             self.counter = 0
-            self.error = sum(self.current_steering[-20:]) /20
-            print ('current steering', str(self.error))
+            self.past_error = set_point - sum(self.yaw_array[-20:]) / 20
+            x_time = [x for x in range(19)]
+            coefs = np.polyfit(x_time, self.y_error, 3)
+            self.future_error = np.polyval(coefs, 12)
+            self.y_error = []
 
         if (f_x > 0):
             speed = -self.speed_value
@@ -140,22 +148,21 @@ class VectorfieldController:
 #            speed = max(self.speed_value, speed * ((np.pi/3)/(abs(steering)+1)))
         steering = 90 + steering * (180/np.pi)
 
-
         x_steering = [60, 80, 90, 100, 120]
-        y_steering = [speed * 0.9, speed, speed * 1.1, speed * 1.1, speed * 1.2]
+        y_steering = [speed * 1.2, speed * 1.1, speed * 1.1, speed * 1.1, speed * 1.2]
 
-        steering_coefs = np.polyfit(x_steering,y_steering, 2)
-        speed_ffit = -1 * abs(np.polyval(steering_coefs,  steering));
+        steering_coefs = np.polyfit(x_steering, y_steering, 2)
+        speed_ffit = -1 * abs(np.polyval(steering_coefs, steering));
         speed = max(speed_ffit, -self.speed_value)
 
-
         print("Steering " + str(steering))
-        print("Error " + str(self.error))
+        print("past Error " + str(self.past_error))
+        print("future Error " + str(self.future_error))
         print("Speed " + str(speed))
-        #print("Yaw " + str(yaw))
+        print("Yaw " + str(yaw))
         print("---------------------------------")
 
-        rospy.sleep(0.01)
+        rospy.sleep(0.1)
         self.pub.publish(Int16(steering))
         #self.stop_start_pub.publish(0)
         if not self.shutdown_:

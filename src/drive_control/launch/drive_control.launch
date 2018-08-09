@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8" ?>
-<launch>
-	<arg name="speed_rpm" default="200" />
-	<node name="drive_control" pkg="drive_control" type="drive_control.py" output="screen">
-		<param name="speed_rpm" value="$(arg speed_rpm)" />
-	</node>
-</launch>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<launch>
+	<node name="obstacle_detection" pkg="obstacle_detection" type="obstacle_detection.py"></node>
+	<node name="fub_navigation" pkg="fub_navigation" type="control.py"></node>
+</launch>

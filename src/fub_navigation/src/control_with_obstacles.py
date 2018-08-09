@@ -12,7 +12,7 @@ class ForceController:
     def __init__(self):
 
         self.map_size=[600,400] #m
-        self.map_origin = [0,0] 
+        self.map_origin = [0,0]
         self.resolution = 10 # cm
         self.obstacle_matrix = np.zeros( (self.map_size[0]/self.resolution+10,self.map_size[1]/self.resolution+10,2),dtype='f' )
         self.lane=1
@@ -23,11 +23,11 @@ class ForceController:
         	self.matrix = np.load('matrixDynamic_lane2.npy')
         self.marker_pub3 = rospy.Publisher('obstacles3', MarkerArray,queue_size=1)
         self.init_markers()
-        self.pub = rospy.Publisher("/manual_control/steering", Int16, queue_size=1)
-        self.pub_speed = rospy.Publisher("/manual_control/speed", Int16, queue_size=100, latch=True)
-        self.pub_yaw = rospy.Publisher("/desired_yaw", Float32, queue_size=100, latch=True)
+        self.pub = rospy.Publisher("/goraa/manual_control/steering", Int16, queue_size=1)
+        self.pub_speed = rospy.Publisher("/goraa/manual_control/speed", Int16, queue_size=100, latch=True)
+        self.pub_yaw = rospy.Publisher("/goraa/desired_yaw", Float32, queue_size=100, latch=True)
 	#self.sub_yaw = rospy.Subscriber("/model_car/yaw", Float32, self.callback, queue_size=1)
-        self.sub_odom = rospy.Subscriber("/odom", Odometry, self.callback, queue_size=1)
+        self.sub_odom = rospy.Subscriber("/localization/odom/5", Odometry, self.callback, queue_size=1)
         self.sub_points = rospy.Subscriber("/clicked_point", PointStamped, self.lane_callback, queue_size=1)
         self.sub_ = rospy.Subscriber("/basic_controls/update_full", InteractiveMarkerInit, self.interactive_callback, queue_size=1)
         # Define a marker publisher.
@@ -170,10 +170,10 @@ class ForceController:
         marker_ns = 'force_vectors'
         marker_id = 0
         marker_color = {'r': 0.0, 'g': 0.0, 'b': 1.0, 'a': 0.5}
-        
+
         # Define a marker publisher.
         self.marker_pub = rospy.Publisher('waypoint_markers', Marker,queue_size=1)
-        
+
         # Initialize the marker points list.
         self.markers = Marker()
         self.markers.ns = marker_ns
@@ -182,13 +182,13 @@ class ForceController:
         self.markers.action = Marker.ADD
         self.markers.lifetime = rospy.Duration(marker_lifetime)
         self.markers.scale.x = marker_scale * 0.02
-        self.markers.scale.y = marker_scale 
-        self.markers.scale.z = marker_scale 
+        self.markers.scale.y = marker_scale
+        self.markers.scale.z = marker_scale
         self.markers.color.r = marker_color['r']
         self.markers.color.g = marker_color['g']
         self.markers.color.b = marker_color['b']
         self.markers.color.a = marker_color['a']
-        
+
         self.markers.header.frame_id = 'map'
         self.markers.header.stamp = rospy.Time.now()
         self.markers.points = list()
@@ -205,13 +205,13 @@ class ForceController:
         self.markers1.action = Marker.ADD
         self.markers1.lifetime = rospy.Duration(marker_lifetime)
         self.markers1.scale.x = marker_scale * 0.005
-        self.markers1.scale.y = marker_scale 
-        self.markers1.scale.z = marker_scale 
+        self.markers1.scale.y = marker_scale
+        self.markers1.scale.z = marker_scale
         self.markers1.color.r = 1.0
         self.markers1.color.g = 0.0
         self.markers1.color.b = 0.0
         self.markers1.color.a = 1.0
-        
+
         self.markers1.header.frame_id = 'map'
         self.markers1.header.stamp = rospy.Time.now()
         self.markers1.points = list()
@@ -227,13 +227,13 @@ class ForceController:
         self.markers2.action = Marker.ADD
         self.markers2.lifetime = rospy.Duration(marker_lifetime)
         self.markers2.scale.x = marker_scale * 0.005
-        self.markers2.scale.y = marker_scale 
-        self.markers2.scale.z = marker_scale 
+        self.markers2.scale.y = marker_scale
+        self.markers2.scale.z = marker_scale
         self.markers2.color.r = 0.0
         self.markers2.color.g = 1.0
         self.markers2.color.b = 0.0
         self.markers2.color.a = 1.0
-        
+
         self.markers2.header.frame_id = 'map'
         self.markers2.header.stamp = rospy.Time.now()
         self.markers2.points = list()
